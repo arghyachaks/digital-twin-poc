@@ -1,0 +1,21 @@
+{
+  "_comment": "Shared material catalog. Blender names material slots with these keys; Unreal builds one Material Instance per key from M_TwinMaster. All textures are 2048x2048 max.",
+  "max_texture_size": 2048,
+  "texture_sets": ["PaintedSteel", "Galvanized", "Concrete", "Cladding", "Grating", "Refractory"],
+  "materials": {
+    "MI_PumpBlue":     {"set": "PaintedSteel", "tint": [0.03, 0.12, 0.38], "uv_scale": 1.0},
+    "MI_MotorGrey":    {"set": "PaintedSteel", "tint": [0.26, 0.30, 0.28], "uv_scale": 1.0},
+    "MI_SafetyYellow": {"set": "PaintedSteel", "tint": [0.85, 0.55, 0.03], "uv_scale": 1.0},
+    "MI_SteelDark":    {"set": "PaintedSteel", "tint": [0.09, 0.09, 0.10], "uv_scale": 1.0},
+    "MI_TankWhite":    {"set": "PaintedSteel", "tint": [0.78, 0.78, 0.75], "uv_scale": 0.5},
+    "MI_PipeGrey":     {"set": "PaintedSteel", "tint": [0.45, 0.46, 0.44], "uv_scale": 1.0},
+    "MI_PipeRed":      {"set": "PaintedSteel", "tint": [0.55, 0.04, 0.03], "uv_scale": 1.0},
+    "MI_PipeGreen":    {"set": "PaintedSteel", "tint": [0.06, 0.30, 0.10], "uv_scale": 1.0},
+    "MI_PipeYellow":   {"set": "PaintedSteel", "tint": [0.80, 0.60, 0.05], "uv_scale": 1.0},
+    "MI_Galvanized":   {"set": "Galvanized",   "tint": [1.0, 1.0, 1.0],    "uv_scale": 1.0},
+    "MI_Cladding":     {"set": "Cladding",     "tint": [0.95, 0.96, 0.97], "uv_scale": 1.0},
+    "MI_Concrete":     {"set": "Concrete",     "tint": [1.0, 1.0, 1.0],    "uv_scale": 0.25},
+    "MI_Grating":      {"set": "Grating",      "tint": [0.9, 0.85, 0.2],   "uv_scale": 2.0},
+    "MI_Refractory":   {"set": "Refractory",   "tint": [1.0, 1.0, 1.0],    "uv_scale": 0.5}
+  }
+}

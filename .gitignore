@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# runtime output
+logs/
+data/
+
+# Blender backups
+*.blend1
+
+# Unreal Engine generated folders (rebuilt by scripts/2_build_twin_unreal.bat)
+unreal/RefineryTwin/Content/
+unreal/RefineryTwin/Intermediate/
+unreal/RefineryTwin/Saved/
+unreal/RefineryTwin/DerivedDataCache/
+unreal/RefineryTwin/Binaries/
+unreal/RefineryTwin/RefineryTwin.uproject

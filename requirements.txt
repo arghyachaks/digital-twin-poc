@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+numpy
+python-dotenv
+langgraph>=0.2
+langchain-core>=0.3
+langchain-ollama
+langchain-anthropic
+langchain-openai

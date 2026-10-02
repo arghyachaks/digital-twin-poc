@@ -1,0 +1,24 @@
+{
+  "_comment": "Crude Distillation Unit CDU-100 (fictional plant). Positions in Unreal cm, yaw in degrees. 'tag' is the asset ID used by the sensor simulator, ML service and LangGraph agent.",
+  "unit": "CDU-100",
+  "ground": {"mesh": "SM_GroundTile", "tile_size_cm": 2000, "nx": 10, "ny": 8, "origin": [-9000, -8000, 0]},
+  "equipment": [
+    {"tag": "C-101", "name": "Atmospheric Distillation Column", "mesh": "SM_DistillationColumn", "loc": [0, 0, 0],     "yaw": 0,  "monitored": true},
+    {"tag": "H-101", "name": "Crude Charge Heater",             "mesh": "SM_Furnace",            "loc": [-3800, 200, 0], "yaw": 0,  "monitored": true},
+    {"tag": "E-101", "name": "Crude/Kero Exchanger",            "mesh": "SM_HeatExchanger",      "loc": [2600, -1000, 0], "yaw": 0, "monitored": true},
+    {"tag": "E-102", "name": "Crude/Diesel Exchanger",          "mesh": "SM_HeatExchanger",      "loc": [2600, -200, 0],  "yaw": 0, "monitored": true},
+    {"tag": "E-103", "name": "Crude/Residue Exchanger",         "mesh": "SM_HeatExchanger",      "loc": [2600, 600, 0],   "yaw": 0, "monitored": true},
+    {"tag": "E-104", "name": "Overhead Condenser",              "mesh": "SM_HeatExchanger",      "loc": [2600, 1400, 0],  "yaw": 0, "monitored": true},
+    {"tag": "P-101A", "name": "Crude Charge Pump A",            "mesh": "SM_Pump_Centrifugal",   "loc": [-1600, -2400, 0], "yaw": 0, "monitored": true, "hero": true},
+    {"tag": "P-101B", "name": "Crude Charge Pump B (spare)",    "mesh": "SM_Pump_Centrifugal",   "loc": [-1100, -2400, 0], "yaw": 0, "monitored": true},
+    {"tag": "P-102A", "name": "Reflux Pump A",                  "mesh": "SM_Pump_Centrifugal",   "loc": [-200, -2400, 0],  "yaw": 0, "monitored": true},
+    {"tag": "P-102B", "name": "Reflux Pump B (spare)",          "mesh": "SM_Pump_Centrifugal",   "loc": [300, -2400, 0],   "yaw": 0, "monitored": true},
+    {"tag": "P-103A", "name": "Bottoms Pump A",                 "mesh": "SM_Pump_Centrifugal",   "loc": [1200, -2400, 0],  "yaw": 0, "monitored": true},
+    {"tag": "P-103B", "name": "Bottoms Pump B (spare)",         "mesh": "SM_Pump_Centrifugal",   "loc": [1700, -2400, 0],  "yaw": 0, "monitored": true},
+    {"tag": "T-101", "name": "Crude Feed Tank",                 "mesh": "SM_StorageTank",        "loc": [7600, 3200, 0],  "yaw": 0,  "monitored": true},
+    {"tag": "T-102", "name": "Diesel Product Tank",             "mesh": "SM_StorageTank",        "loc": [7600, -3200, 0], "yaw": 0,  "monitored": true}
+  ],
+  "pipe_racks": {"mesh": "SM_PipeRack", "y": -4200, "x_start": -6000, "segment_cm": 1800, "count": 7},
+  "pump_hookups": {"valve_mesh": "SM_GateValve", "pipe_mesh": "SM_Pipe_Straight",
+                    "discharge_offset": [-70, 0, 110], "rack_pipe_z": 520}
+}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CDU-100 Digital Twin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<header>
+  <div class="brand"><b>CDU-100</b><span>Digital Twin · Crude Distillation Unit</span></div>
+  <div class="kpis">
+    <div class="kpi"><b id="k-time" class="mono">--</b><span>Sim time</span></div>
+    <div class="kpi"><b id="k-ok" class="mono c-ok">0</b><span>Healthy</span></div>
+    <div class="kpi"><b id="k-warn" class="mono c-warn">0</b><span>Warning</span></div>
+    <div class="kpi"><b id="k-alarm" class="mono c-alarm">0</b><span>Alarm/Trip</span></div>
+  </div>
+  <div class="grow"></div>
+  <div class="seg" id="speeds" title="Simulation speed"></div>
+  <button class="btn ghost" id="reset-all" title="Reset all simulated faults">Reset sim</button>
+  <div class="conn"><i id="conn"></i><span id="conn-t">offline</span></div>
+</header>
+
+<aside id="list"></aside>
+
+<main id="view">
+  <div id="scene"></div>
+  <div class="viewbar">
+    <div class="seg" id="presets"></div>
+    <div class="right"><div class="seg" id="skymode" title="Sky and lighting"></div><div class="seg" id="labelmode" title="Label density"></div></div>
+  </div>
+  <div class="legend">
+    <span><i class="c-ok"></i>OK</span><span><i class="c-standby"></i>Standby</span>
+    <span><i class="c-warn"></i>Warning</span><span><i class="c-alarm"></i>Alarm</span><span><i class="c-trip"></i>Tripped</span>
+  </div>
+  <div id="ticker"></div>
+  <div id="loading">Loading 3D plant…</div>
+</main>
+
+<section id="side">
+  <nav class="tabs"><button data-tab="asset" class="on">Asset</button><button data-tab="chat">Assistant</button><button data-tab="events">Events</button></nav>
+  <div class="tab on" id="tab-asset"><div class="empty">Click equipment in the 3D view or pick one from the list.</div></div>
+  <div class="tab" id="tab-chat">
+    <div id="msgs"></div>
+    <div id="suggest"></div>
+    <form id="ask"><input id="q" autocomplete="off" placeholder="Ask about the plant… e.g. Which assets need attention?"><button class="btn">Send</button></form>
+    <div id="llm" class="tiny"></div>
+  </div>
+  <div class="tab" id="tab-events"><div id="events"></div></div>
+</section>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

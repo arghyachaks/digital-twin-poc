@@ -1,0 +1,13 @@
+CDU-100 refinery digital twin POC
+
+- FastAPI app: embedded plant simulator, twin engine (health, RUL,
+  anomaly, history), REST + WebSocket telemetry
+- LangGraph assistant with plant tools; Ollama / Anthropic / OpenAI
+  or offline mode
+- Three.js web twin: Blender-built GLB assets + 2K PBR textures,
+  sunset/day/night sky, status rings, smart labels, live charts
+- Blender asset generator and optional Unreal Engine 5 build scripts
+- START.bat one-click launcher
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016fk9L7iRPCzya3PCVVAAEi
