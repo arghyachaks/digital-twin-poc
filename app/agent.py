@@ -13,10 +13,15 @@ _actions = contextvars.ContextVar("ui_actions", default=None)
 
 FAULT_HINTS = {
     "pump": {
-        "bearing_wear": "Rising vibration together with rising bearing temperature is the classic bearing-wear signature. "
-                        "Plan a bearing replacement; check lubrication and alignment; switch to the spare pump before zone D.",
-        "cavitation": "Noisy vibration with falling discharge pressure points to cavitation. Check suction strainer, "
-                      "suction pressure / NPSH margin and tank level.",
+        "bearing_fault": "High-frequency envelope and the bearing defect band (BPFO) rising, with bearing temperature "
+                         "climbing, is the classic rolling-bearing defect signature. Plan a bearing replacement, check "
+                         "lubrication, and switch to the spare pump before ISO zone D.",
+        "imbalance": "A dominant 1x running-speed component points to rotor imbalance (impeller wear, deposits or a lost "
+                     "balance weight). Schedule a field balance or impeller inspection.",
+        "misalignment": "Strong 2x and axial vibration point to shaft misalignment between pump and motor. Check coupling "
+                        "and do a laser alignment; inspect the coupling and soft foot.",
+        "cavitation": "Broadband vibration and HF envelope with falling, fluctuating suction and discharge pressure point "
+                      "to cavitation. Check suction strainer, NPSH margin and the feed tank level; reduce flow if needed.",
     },
     "exchanger": {"fouling": "Falling crude outlet temperature with rising shell-side pressure drop indicates fouling. "
                              "Schedule cleaning; meanwhile the fired heater must add the lost duty (more fuel)."},
@@ -25,6 +30,23 @@ FAULT_HINTS = {
     "column": {"degradation": "Rising tray pressure drop and bottom level suggests flooding/fouled trays. Reduce feed or "
                               "check reflux and bottoms pump."},
 }
+
+
+def pump_signature(s, base):
+    """Rule-based vibration analysis (placeholder until the trained classifier): which fault fingerprint
+    has grown most relative to this pump's healthy baseline. Returns a fault mode or None."""
+    def rise(k):
+        b = base.get(k)
+        return (s.get(k, 0) - b) / b if b else 0.0
+    score = {
+        "imbalance": rise("vib_1x_mm_s"),
+        "misalignment": (rise("vib_2x_mm_s") + rise("vib_axial_mm_s")) / 2,
+        # BPFO is bearing-specific; the HF envelope also rises with cavitation, so it only supports
+        "bearing_fault": rise("vib_bpfo_mm_s") + 0.1 * rise("vib_hf_env_g"),
+        "cavitation": max(rise("vib_broadband_mm_s"), max(0.0, -rise("suction_bar")) * 8),
+    }
+    mode, best = max(score.items(), key=lambda kv: kv[1])
+    return mode if best > 0.6 else None
 
 
 def _act(**a):
@@ -103,9 +125,8 @@ def diagnose_asset(tag: str) -> str:
     if devs:
         lines.append("Largest deviations from healthy baseline:")
         lines += [f"  - {k}: {_fmt(k, b)} → {_fmt(k, v)} ({(v - b) / b:+.0%})" for _, k, b, v in devs[:4]]
-    mode = f.get("fault")
-    if not mode and f["kind"] == "pump" and devs and devs[0][1] in ("vibration_mm_s", "bearing_temp_c") and devs[0][0] > 0.3:
-        mode = "bearing_wear"
+    # Diagnose from the evidence (sensor signatures), never from the simulator's injected fault.
+    mode = pump_signature(f["sensors"], base) if f["kind"] == "pump" else (f.get("fault") or None)
     significant = f["status"] not in ("OK", "STANDBY") or (devs and devs[0][0] > 0.15)
     hint = FAULT_HINTS.get(f["kind"], {}).get(mode or "", "") if significant else ""
     if hint:
@@ -136,7 +157,7 @@ def focus_asset(tag: str) -> str:
 
 def simulate_fault(tag: str, mode: str = "", severity: float = 0.4, hours_to_fail: float = 12.0) -> str:
     """SCENARIO SANDBOX ONLY: inject a simulated fault into the twin (never the real plant). Only use when the user
-    explicitly asks for a what-if / simulation. Modes: pumps 'bearing_wear' or 'cavitation'; exchangers 'fouling';
+    explicitly asks for a what-if / simulation. Modes: pumps 'bearing_fault', 'imbalance', 'misalignment' or 'cavitation'; exchangers 'fouling';
     furnace/column 'degradation'. severity 0-1."""
     t = TWIN.norm_tag(tag)
     if not t:

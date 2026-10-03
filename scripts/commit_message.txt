@@ -1,13 +1,13 @@
-CDU-100 refinery digital twin POC
+Pump physics with vibration spectrum + ML training dataset
 
-- FastAPI app: embedded plant simulator, twin engine (health, RUL,
-  anomaly, history), REST + WebSocket telemetry
-- LangGraph assistant with plant tools; Ollama / Anthropic / OpenAI
-  or offline mode
-- Three.js web twin: Blender-built GLB assets + 2K PBR textures,
-  sunset/day/night sky, status rings, smart labels, live charts
-- Blender asset generator and optional Unreal Engine 5 build scripts
-- START.bat one-click launcher
+- backend/pump_physics.py: shared pump model (1x, 2x, axial, BPFO band,
+  HF envelope, broadband, temps, pressures) with imbalance,
+  misalignment, bearing_fault and cavitation fault modes
+- Live twin uses the same physics; averaged vibration for ISO alarms
+- Rule-based vibration diagnosis replaces reading the injected fault
+- ml/generate_dataset.py: 400 run-to-failure pump histories with
+  fault label, severity and RUL, split by pump; dataset card + plots
+- UI: new sensors, fault buttons and HF envelope chart
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016fk9L7iRPCzya3PCVVAAEi

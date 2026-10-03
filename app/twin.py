@@ -13,7 +13,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "backend"))
 from simulator import LAYOUT, Plant  # noqa: E402
 
-UNITS = {"vibration_mm_s": "mm/s", "bearing_temp_c": "°C", "motor_current_a": "A", "discharge_bar": "bar",
+UNITS = {"vibration_mm_s": "mm/s", "vib_1x_mm_s": "mm/s", "vib_2x_mm_s": "mm/s", "vib_axial_mm_s": "mm/s",
+         "vib_bpfo_mm_s": "mm/s", "vib_hf_env_g": "g", "vib_broadband_mm_s": "mm/s", "suction_bar": "bar", "bearing_temp_c": "°C", "motor_current_a": "A", "discharge_bar": "bar",
          "flow_m3h": "m³/h", "speed_rpm": "rpm", "fouling_m2k_kw": "m²K/kW", "shell_dp_bar": "bar",
          "crude_out_c": "°C", "hot_in_c": "°C", "duty_mw": "MW", "coil_outlet_c": "°C", "tube_skin_c": "°C",
          "stack_c": "°C", "o2_pct": "%", "fuel_gas_t_h": "t/h", "top_c": "°C", "flash_zone_c": "°C",

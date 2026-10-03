@@ -18,3 +18,6 @@ unreal/RefineryTwin/Saved/
 unreal/RefineryTwin/DerivedDataCache/
 unreal/RefineryTwin/Binaries/
 unreal/RefineryTwin/RefineryTwin.uproject
+
+# ML dataset (re-create with scripts/5_generate_dataset.bat; card, units list and plots are kept)
+ml/data/*.csv.gz

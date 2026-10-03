@@ -38,7 +38,19 @@ Configured in `.env` (copied from `.env.example` on first run). Default `LLM_PRO
 | `unreal/`, `scripts/2_*`, `scripts/3_*` | Optional Unreal Engine 5 version of the twin (cinematic) | No — optional, parked |
 | `data/` | Telemetry CSV logs for training ML models | Input for the ML step |
 
+## Machine learning (in progress)
+Step 1–2 done: richer pump physics and a labelled training set.
+
+- `backend/pump_physics.py` — one pump model shared by the live twin and the training data: vibration spectrum
+  (1×, 2×, axial, bearing defect band, high-frequency envelope, broadband), temperatures, pressures, with four
+  fault modes: imbalance, misalignment, bearing_fault, cavitation.
+- `scripts\5_generate_dataset.bat` (or `python ml/generate_dataset.py`) — simulates 400 pumps (80 healthy +
+  80 per fault, run to failure) into `ml/data/pump_runs.csv.gz` (~384k rows, ~15 MB, ~20 s). Labels: fault
+  label, severity, remaining useful life; train/val/test split by pump. Read `ml/data/dataset_card.md`.
+- Until the models are trained, the assistant diagnoses pumps with rule-based vibration analysis
+  (`app/agent.py: pump_signature`) — the baseline the ML classifier must beat.
+
 ## Next steps
-1. ML service: train anomaly / remaining-useful-life models on `data/*.csv` and replace the trend-based RUL.
+1. ML step 3: train Isolation Forest (anomaly), XGBoost (fault class, RUL) and SHAP on `ml/data`, tracked in MLflow.
 2. Assistant: add RAG over maintenance manuals / SOPs and a work-order tool with human approval.
 3. UI: streaming chat replies, X-ray pump view, time scrubber.

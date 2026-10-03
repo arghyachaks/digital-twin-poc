@@ -13,18 +13,18 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 const $ = (s) => document.querySelector(s);
 const STATUS = { OK: "#34c77b", STANDBY: "#5b8cff", WARN: "#f5a524", ALARM: "#ff4d4f", TRIPPED: "#ff2d55" };
-const UNITS = { vibration_mm_s: "mm/s", bearing_temp_c: "°C", motor_current_a: "A", discharge_bar: "bar", flow_m3h: "m³/h",
+const UNITS = { vibration_mm_s: "mm/s", vib_1x_mm_s: "mm/s", vib_2x_mm_s: "mm/s", vib_axial_mm_s: "mm/s", vib_bpfo_mm_s: "mm/s", vib_hf_env_g: "g", vib_broadband_mm_s: "mm/s", suction_bar: "bar", bearing_temp_c: "°C", motor_current_a: "A", discharge_bar: "bar", flow_m3h: "m³/h",
   speed_rpm: "rpm", fouling_m2k_kw: "m²K/kW", shell_dp_bar: "bar", crude_out_c: "°C", hot_in_c: "°C", duty_mw: "MW",
   coil_outlet_c: "°C", tube_skin_c: "°C", stack_c: "°C", o2_pct: "%", fuel_gas_t_h: "t/h", top_c: "°C", flash_zone_c: "°C",
   top_bar: "bar", bottom_level_pct: "%", tray_dp_mbar: "mbar", level_pct: "%", temp_c: "°C", level_m: "m" };
-const CHARTS = { pump: ["vibration_mm_s", "bearing_temp_c"], exchanger: ["crude_out_c", "shell_dp_bar"],
+const CHARTS = { pump: ["vibration_mm_s", "vib_hf_env_g", "bearing_temp_c"], exchanger: ["crude_out_c", "shell_dp_bar"],
   furnace: ["tube_skin_c", "stack_c"], column: ["tray_dp_mbar", "bottom_level_pct"], tank: ["level_pct", "temp_c"] };
 const LIMITS = { vibration_mm_s: [[4.5, "#f5a524"], [7.1, "#ff4d4f"]] };
-const FAULTS = { pump: ["bearing_wear", "cavitation"], exchanger: ["fouling"], furnace: ["degradation"], column: ["degradation"], tank: [] };
+const FAULTS = { pump: ["bearing_fault", "imbalance", "misalignment", "cavitation"], exchanger: ["fouling"], furnace: ["degradation"], column: ["degradation"], tank: [] };
 const KIND = { SM_Pump_Centrifugal: "pump", SM_HeatExchanger: "exchanger", SM_DistillationColumn: "column", SM_Furnace: "furnace", SM_StorageTank: "tank" };
 const ue = (x, y, z) => new THREE.Vector3(x / 100, z / 100, y / 100); // Unreal cm -> three m (Y up)
 const fmt = (v) => v == null ? "—" : Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : Math.abs(v) >= 0.01 ? v.toFixed(2) : v.toExponential(1);
-const label = (k) => k.replace(/_(mm_s|c|a|bar|m3h|rpm|m2k_kw|mw|pct|t_h|mbar|m)$/, "").replace(/_/g, " ");
+const label = (k) => k.replace(/_(mm_s|c|a|bar|m3h|rpm|m2k_kw|mw|pct|t_h|mbar|m|g)$/, "").replace(/^vib_/, "vibration ").replace(/_/g, " ").replace("hf env", "HF envelope").replace("bpfo", "bearing band (BPFO)").replace("1x", "1×").replace("2x", "2×");
 
 // =========================================================== renderer / scene
 const host = $("#scene");

@@ -34,6 +34,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 
+import pump_physics
+
 try:  # only needed for the standalone server below; the FastAPI app imports Plant directly
     from websockets.asyncio.server import broadcast, serve
 except ImportError:
@@ -156,35 +158,39 @@ class Asset:
 
 
 class Pump(Asset):
-    """Centrifugal pump: bearing wear -> vibration (ISO 10816 zones), temperature, current."""
-    base_value = 1.8
+    """Centrifugal pump driven by backend/pump_physics.py (same physics as the ML training data):
+    vibration spectrum (1x, 2x, axial, bearing band, HF envelope, broadband), temperatures, pressures.
+    Fault modes: imbalance, misalignment, bearing_fault, cavitation. ISO 10816 zones on overall vibration."""
+    base_value = 1.3
 
     def __init__(self, spec, rng):
         super().__init__(spec, rng)
         self.spare = spec["tag"].endswith("B")
         self.running = not self.spare
-        self.flow_nom = {"P-101": 420.0, "P-102": 160.0, "P-103": 230.0}.get(spec["tag"][:5], 200.0)
+        self.np_rng = np.random.default_rng(rng.randrange(1 << 30))
+        self.unit = pump_physics.make_unit(self.np_rng, spec["tag"][:5])
+        self.base_value = 1.3 * self.unit["k_base"]
+
+    def inject(self, mode, severity=0.3, hours_to_fail=None):
+        super().inject(pump_physics.canonical(mode or "bearing_fault"), severity, hours_to_fail)
 
     def read(self, t_h):
         if not self.running:
-            return {"vibration_mm_s": abs(self.n(0.05)), "bearing_temp_c": 34 + self.n(0.3),
-                    "motor_current_a": 0.0, "discharge_bar": 0.4 + self.n(0.02), "flow_m3h": 0.0, "speed_rpm": 0.0}
-        d = self.d
-        amb = 4 * math.sin(2 * math.pi * (t_h % 24) / 24)
-        vib = self.base_value + 9.5 * d ** 2 + abs(self.n(0.12 + 0.6 * d))
-        if self.mode == "cavitation":
-            vib += 2.5 * d + abs(self.n(1.0 * d))
-        return {
-            "vibration_mm_s": vib,
-            "bearing_temp_c": 62 + amb + 32 * d ** 1.5 + self.n(0.4),
-            "motor_current_a": 182 + 16 * d + self.n(1.5),
-            "discharge_bar": 18.2 - (2.5 if self.mode == "cavitation" else 1.2) * d + self.n(0.08),
-            "flow_m3h": self.flow_nom * (1 - 0.08 * d) + self.n(2.0),
-            "speed_rpm": 2975 + self.n(3),
-        }
+            self._ema = None
+            return pump_physics.standby_sensors(self.np_rng)
+        load = float(np.clip(0.88 + 0.06 * math.sin(2 * math.pi * t_h / 24 + self.unit["phase"]), 0.62, 1.05))
+        amb = float(pump_physics.ambient_profile(t_h))
+        s = pump_physics.sensors(self.np_rng, self.unit, self.mode or "normal", self.d, load, amb)
+        # alarm logic uses averaged overall vibration (as online monitoring systems do), so noisy faults don't flicker
+        v = s["vibration_mm_s"]
+        prev = getattr(self, "_ema", None)
+        self._ema = v if prev is None else prev + 0.25 * (v - prev)
+        return s
 
     def indicator(self):
-        return self.sensors.get("vibration_mm_s", 0.0)
+        if not self.running:
+            return self.sensors.get("vibration_mm_s", 0.0)
+        return getattr(self, "_ema", None) or self.sensors.get("vibration_mm_s", 0.0)
 
     def limits(self):
         return (4.5, 7.1, 11.2)  # ISO 10816-3 group 2 (rigid): B/C, C/D, failure
@@ -282,7 +288,7 @@ class Plant:
         self.pending = []
         # Demo scenario: hero pump P-101A has early bearing wear, fails in ~70 sim hours
         if "P-101A" in self.assets:
-            self.assets["P-101A"].inject("bearing_wear", severity=0.05, hours_to_fail=70)
+            self.assets["P-101A"].inject("bearing_fault", severity=0.05, hours_to_fail=70)
         self._csv = None
 
     def event(self, tag, level, msg):
@@ -342,7 +348,9 @@ class Plant:
         c = msg.get("cmd")
         a = self.assets.get(msg.get("tag", ""))
         if c == "inject_fault" and a:
-            mode = msg.get("mode", {"pump": "bearing_wear", "exchanger": "fouling"}.get(a.kind, "degradation"))
+            mode = msg.get("mode") or {"pump": "bearing_fault", "exchanger": "fouling"}.get(a.kind, "degradation")
+            if a.kind == "pump":
+                mode = pump_physics.canonical(mode)
             a.inject(mode, float(msg.get("severity", 0.3)), msg.get("hours_to_fail"))
             if not a.running and a.kind == "pump" and a.d < 1:
                 a.running = True
