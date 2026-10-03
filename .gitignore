@@ -21,3 +21,10 @@ unreal/RefineryTwin/RefineryTwin.uproject
 
 # ML dataset (re-create with scripts/5_generate_dataset.bat; card, units list and plots are kept)
 ml/data/*.csv.gz
+
+# MLflow tracking store and run artifacts (local); the production model bundle in ml/models IS committed
+ml/mlflow.db
+ml/mlartifacts/
+ml/mlruns/
+ml/reports/rul_test_predictions.csv
+ml/models/rul_lstm.pt

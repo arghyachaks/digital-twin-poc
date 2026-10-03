@@ -12,7 +12,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 const $ = (s) => document.querySelector(s);
-const STATUS = { OK: "#34c77b", STANDBY: "#5b8cff", WARN: "#f5a524", ALARM: "#ff4d4f", TRIPPED: "#ff2d55" };
+const STATUS = { OK: "#34c77b", STANDBY: "#5b8cff", WATCH: "#a78bfa", WARN: "#f5a524", ALARM: "#ff4d4f", TRIPPED: "#ff2d55" };
 const UNITS = { vibration_mm_s: "mm/s", vib_1x_mm_s: "mm/s", vib_2x_mm_s: "mm/s", vib_axial_mm_s: "mm/s", vib_bpfo_mm_s: "mm/s", vib_hf_env_g: "g", vib_broadband_mm_s: "mm/s", suction_bar: "bar", bearing_temp_c: "°C", motor_current_a: "A", discharge_bar: "bar", flow_m3h: "m³/h",
   speed_rpm: "rpm", fouling_m2k_kw: "m²K/kW", shell_dp_bar: "bar", crude_out_c: "°C", hot_in_c: "°C", duty_mw: "MW",
   coil_outlet_c: "°C", tube_skin_c: "°C", stack_c: "°C", o2_pct: "%", fuel_gas_t_h: "t/h", top_c: "°C", flash_zone_c: "°C",
@@ -223,7 +223,8 @@ function renderAsset(force) {
     <div class="stats">
       <div class="stat"><b style="color:${col}">${f.health.toFixed(0)}%</b><span>Health</span></div>
       <div class="stat"><b>${f.rul_h != null ? f.rul_h.toFixed(0) + "h" : "—"}</b><span>Remaining life</span></div>
-      <div class="stat"><b>${f.anomaly.toFixed(1)}σ</b><span>Anomaly</span></div></div>
+      <div class="stat"><b>${f.ml && f.ml.state === "ok" ? f.ml.anomaly.toFixed(2) : f.anomaly.toFixed(1) + "σ"}</b><span>Anomaly</span></div></div>
+    ${mlBlock(f)}
     ${(CHARTS[f.kind] || []).map((s) => `<div class="chartbox"><div class="ct"><span>${label(s)}</span><span class="mono">${fmt(f.sensors[s])} ${UNITS[s] || ""}</span></div><canvas id="ch-${s}"></canvas></div>`).join("")}
     <table class="sensors">${Object.entries(f.sensors).map(([k, v]) => `<tr><td>${label(k)}</td><td>${fmt(v)} ${UNITS[k] || ""}</td></tr>`).join("")}</table>
     <div class="sec">Scenario sandbox (simulation only)</div>
@@ -233,6 +234,22 @@ function renderAsset(force) {
   el.querySelector("[data-r]").onclick = () => send({ cmd: "reset", tag: selected });
   el.querySelector("[data-ask]").onclick = () => { setTab("chat"); ask(`Diagnose ${selected}. What is happening and what should we do?`); };
   for (const s of CHARTS[f.kind] || []) drawChart($(`#ch-${s}`), a.hist[s] || [], col, LIMITS[s]);
+}
+function mlBlock(f) {
+  const m = f.ml;
+  if (!m || f.kind !== "pump") return "";
+  if (m.state === "learning") return `<div class="mlbox"><div class="mlh">AI condition models</div><div class="tiny">Learning this pump's healthy baseline… ${Math.round(m.progress * 100)}% of 12 h</div></div>`;
+  if (m.state !== "ok") return "";
+  const fault = m.fault !== "normal" && (m.alert || !["OK", "WATCH"].includes(f.status) || m.early_warning);
+  const conf = fault ? m.confidence : m.probs.normal;
+  const why = m.why_fault || [], maxI = Math.max(...why.map((w) => w.impact), 1e-6);
+  return `<div class="mlbox">
+    <div class="mlh">AI condition models <span class="tiny">v${m.model_version}</span>${m.early_warning ? '<span class="chip" style="background:#a78bfa">EARLY WARNING</span>' : ""}</div>
+    <div class="mlrow"><span>Anomaly score</span><div class="gauge" title="1.0 = alert threshold"><i style="width:${Math.min(m.anomaly / 2, 1) * 100}%;background:${m.alert ? "#a78bfa" : "#34c77b"}"></i><b></b></div><span class="mono">${m.anomaly.toFixed(2)}</span></div>
+    <div class="mlrow"><span>Diagnosis</span><b>${fault ? m.fault.replace("_", " ") : "normal"}</b><span class="mono">${(conf * 100).toFixed(0)}%</span></div>
+    ${fault && m.rul_h ? `<div class="mlrow"><span>Remaining life</span><b>~${m.rul_h.p50} h</b><span class="mono">${m.rul_h.p10}–${m.rul_h.p90} h</span></div>` : ""}
+    ${fault && why.length ? `<div class="sec">Why the model thinks so (SHAP)</div>` + why.map((w) => `<div class="why"><span>${w.label}</span><div class="wbar"><i style="width:${(w.impact / maxI) * 100}%"></i></div><span class="mono">${w.value}</span></div>`).join("") : ""}
+  </div>`;
 }
 function drawChart(cv, data, color, limits) {
   if (!cv) return;
@@ -254,7 +271,7 @@ const events = [];
 function addEvents(list) {
   if (!list.length) return;
   events.unshift(...list.slice().reverse()); events.length = Math.min(events.length, 100);
-  const c = (l) => ({ WARN: "var(--warn)", ALARM: "var(--alarm)", TRIP: "var(--trip)" }[l] || "var(--accent)");
+  const c = (l) => ({ AI: "#a78bfa", WARN: "var(--warn)", ALARM: "var(--alarm)", TRIP: "var(--trip)" }[l] || "var(--accent)");
   $("#events").innerHTML = events.map((e) => `<div class="ev"><span class="tiny">${e.ts.slice(5, 16).replace("T", " ")}</span><span style="color:${c(e.level)}">${e.level}</span><b>${e.tag}</b><span>${e.msg}</span></div>`).join("");
   const tk = $("#ticker");
   for (const e of list) {
@@ -276,18 +293,19 @@ function connect() {
     if (m.type !== "telemetry") return;
     $("#k-time").textContent = m.sim_time.slice(5, 16).replace("T", " ");
     $("#speeds").querySelectorAll("button").forEach((b) => b.classList.toggle("on", +b.dataset.s === m.speed));
-    let ok = 0, warn = 0, bad = 0;
+    let ok = 0, warn = 0, bad = 0, watch = 0;
     for (const [tag, f] of Object.entries(m.assets)) {
       const a = assets[tag]; if (!a) continue;
       a.data = f;
       for (const [k, v] of Object.entries(f.sensors)) { const h = (a.hist[k] ||= []); h.push(v); if (h.length > 240) h.shift(); }
-      f.status === "WARN" ? warn++ : ["ALARM", "TRIPPED"].includes(f.status) ? bad++ : ok++;
+      f.status === "WARN" ? warn++ : ["ALARM", "TRIPPED"].includes(f.status) ? bad++ : f.status === "WATCH" ? watch++ : ok++;
       const col = STATUS[f.status];
       $(`#d-${tag}`).style.background = col; $(`#h-${tag}`).textContent = f.status === "STANDBY" ? "stby" : `${f.health.toFixed(0)}%`;
       a.el.querySelector("i").style.background = col;
-      a.el.querySelector("em").textContent = ["WARN", "ALARM", "TRIPPED"].includes(f.status) ? `${f.status} ${f.health.toFixed(0)}%` : "";
+      a.el.querySelector("em").textContent = f.status === "WATCH" && f.ml ? `AI: ${f.ml.fault.replace("_", " ")} ${(f.ml.confidence * 100).toFixed(0)}%`
+        : ["WARN", "ALARM", "TRIPPED"].includes(f.status) ? `${f.status} ${f.health.toFixed(0)}%` : "";
     }
-    $("#k-ok").textContent = ok; $("#k-warn").textContent = warn; $("#k-alarm").textContent = bad;
+    $("#k-ok").textContent = ok; $("#k-watch").textContent = watch; $("#k-warn").textContent = warn; $("#k-alarm").textContent = bad;
     addEvents(m.events || []);
     renderAsset(false);
   };
@@ -299,7 +317,7 @@ $("#reset-all").onclick = () => send({ cmd: "reset_all" });
 
 // =========================================================== assistant
 const session = Math.random().toString(36).slice(2);
-const SUGGEST = ["Which assets need attention?", "Diagnose P-101A", "Show the vibration trend of P-101A over 24 hours",
+const SUGGEST = ["Which assets need attention?", "What does the AI model say about P-101A, and why?", "Show the vibration trend of P-101A over 24 hours",
   "What happens if E-102 fouls? Simulate it", "Summarise recent alarms"];
 $("#suggest").innerHTML = SUGGEST.map((s) => `<button>${s}</button>`).join("");
 $("#suggest").onclick = (e) => e.target.tagName === "BUTTON" && ask(e.target.textContent);
@@ -349,11 +367,11 @@ function loop() {
   }
   const camDist = camera.position.distanceTo(controls.target);
   for (const [tag, a] of Object.entries(assets)) {
-    const f = a.data, bad = f && ["WARN", "ALARM", "TRIPPED"].includes(f.status);
+    const f = a.data, bad = f && ["WATCH", "WARN", "ALARM", "TRIPPED"].includes(f.status);
     if (f) {
       const pulse = 0.6 + 0.4 * Math.sin(t * f.pulse);
       tmp.set(STATUS[f.status]);
-      const glow = bad ? (f.status === "WARN" ? 0.35 : 0.7) * pulse : 0;
+      const glow = bad ? ({ WATCH: 0.22, WARN: 0.35 }[f.status] ?? 0.7) * pulse : 0;
       for (const m of a.mats) { m.emissive.copy(tmp); m.emissiveIntensity = glow; }
       a.ring.material.color.copy(tmp); a.ring.material.opacity = bad ? 0.55 + 0.4 * pulse : 0.28;
     }

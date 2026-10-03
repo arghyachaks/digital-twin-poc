@@ -72,7 +72,10 @@ def get_plant_overview() -> str:
         counts[f["status"]] = counts.get(f["status"], 0) + 1
         if f["status"] not in ("OK", "STANDBY"):
             rul = f", RUL ~{f['rul_h']:.0f} h" if f.get("rul_h") else ""
-            issues.append(f"- {tag} ({f['name']}): {f['status']}, health {f['health']:.0f}%{rul}, anomaly {f['anomaly']:.1f}σ")
+            ml = f.get("ml") or {}
+            ai = (f", AI: likely {ml['fault'].replace('_', ' ')} ({ml['confidence']:.0%})"
+                  if ml.get("state") == "ok" and ml.get("fault") not in (None, "normal") else "")
+            issues.append(f"- {tag} ({f['name']}): {f['status']}, health {f['health']:.0f}%{rul}{ai}")
     lines = [f"Sim time {m['sim_time'][:16]}, speed x{m['speed']:g}. Status counts: "
              + ", ".join(f"{k} {v}" for k, v in sorted(counts.items()))]
     lines += issues or ["All running assets are healthy."]
@@ -125,9 +128,16 @@ def diagnose_asset(tag: str) -> str:
     if devs:
         lines.append("Largest deviations from healthy baseline:")
         lines += [f"  - {k}: {_fmt(k, b)} → {_fmt(k, v)} ({(v - b) / b:+.0%})" for _, k, b, v in devs[:4]]
-    # Diagnose from the evidence (sensor signatures), never from the simulator's injected fault.
-    mode = pump_signature(f["sensors"], base) if f["kind"] == "pump" else (f.get("fault") or None)
-    significant = f["status"] not in ("OK", "STANDBY") or (devs and devs[0][0] > 0.15)
+    # Diagnose from the evidence, never from the simulator's injected fault:
+    # trained ML models when available, rule-based vibration analysis otherwise.
+    ml = f.get("ml") or {}
+    if f["kind"] == "pump" and ml.get("state") == "ok":
+        lines.append(_ml_text(ml))
+        mode = ml["fault"] if ml["fault"] != "normal" and (ml.get("alert") or f["status"] != "OK") else None
+        significant = mode is not None
+    else:
+        mode = pump_signature(f["sensors"], base) if f["kind"] == "pump" else (f.get("fault") or None)
+        significant = f["status"] not in ("OK", "STANDBY") or (devs and devs[0][0] > 0.15)
     hint = FAULT_HINTS.get(f["kind"], {}).get(mode or "", "") if significant else ""
     if hint:
         lines.append(f"Likely failure mode: {mode.replace('_', ' ')}. {hint}")
@@ -135,6 +145,49 @@ def diagnose_asset(tag: str) -> str:
         lines.append("No significant deviation — asset is operating normally.")
     _act(type="focus", tag=t)
     return "\n".join(lines)
+
+
+def _ml_text(ml):
+    """Readable summary of the ML assessment, including SHAP reasons."""
+    out = [f"AI condition models (v{ml.get('model_version')}): anomaly score {ml['anomaly']:.2f} "
+           f"({'ALERT, outside healthy behaviour' if ml.get('alert') else 'within healthy behaviour'}; 1.0 = alert threshold)"]
+    if ml["fault"] != "normal":
+        out.append(f"  - predicted fault: {ml['fault'].replace('_', ' ')} ({ml['confidence']:.0%} confidence)")
+        r = ml.get("rul_h")
+        if r:
+            out.append(f"  - remaining useful life: ~{r['p50']} h (80% range {r['p10']}-{r['p90']} h)")
+        if ml.get("why_fault"):
+            out.append("  - why this fault (SHAP, strongest first): "
+                       + "; ".join(f"{w['label']} {w['value']}" for w in ml["why_fault"]))
+        if ml.get("why_rul"):
+            out.append("  - what shortens remaining life (SHAP): "
+                       + "; ".join(f"{w['label']} {w['value']} ({w['impact']:+.0f} h)" for w in ml["why_rul"]))
+    else:
+        out.append(f"  - classifier: normal ({ml['confidence']:.0%})")
+    return "\n".join(out)
+
+
+def get_ml_assessment(tag: str) -> str:
+    """Output of the trained AI condition models for a pump: anomaly score, predicted fault with confidence,
+    remaining useful life with an 80% range, and SHAP explanations of WHY (which sensor features drove it).
+    Use for 'what does the AI/model say', 'why', 'how long until failure' questions about pumps."""
+    t, f = TWIN.asset(tag)
+    if not f:
+        return f"Unknown asset '{tag}'."
+    if f["kind"] != "pump":
+        return f"{t} is a {f['kind']}; the AI condition models currently cover pumps only."
+    ml = f.get("ml") or {}
+    if not TWIN.models:
+        return "No trained models are loaded (run scripts\\6_train_models.bat)."
+    st = ml.get("state")
+    if st == "learning":
+        return f"{t}: the models are still learning this pump's healthy baseline ({ml['progress']:.0%} of 12 h)."
+    if st == "idle":
+        return f"{t} is not running ({f['status']}), so it is not being scored."
+    if st != "ok":
+        return f"{t}: no assessment available ({ml.get('error', st)})."
+    _act(type="focus", tag=t)
+    return f"{t} ({f['status']}):\n" + _ml_text(ml)
 
 
 def list_recent_events(limit: int = 10) -> str:
@@ -188,13 +241,16 @@ def set_simulation_speed(multiplier: float) -> str:
     return f"Simulation speed set to x{float(multiplier):g}."
 
 
-TOOLS = [get_plant_overview, get_asset_status, get_sensor_trend, diagnose_asset, list_recent_events,
+TOOLS = [get_plant_overview, get_asset_status, get_sensor_trend, diagnose_asset, get_ml_assessment, list_recent_events,
          focus_asset, simulate_fault, reset_asset, set_simulation_speed]
 
 SYSTEM = """You are the CDU-100 plant assistant inside a refinery digital twin (fictional crude distillation unit).
 Equipment: C-101 atmospheric column, H-101 fired heater, E-101..E-104 heat exchangers,
 pumps P-101A/B (crude charge), P-102A/B (reflux), P-103A/B (bottoms) — the B pumps are spares —
 and tanks T-101 (crude feed), T-102 (diesel).
+Pumps are scored live by trained AI condition models (Isolation Forest anomaly score, XGBoost fault classifier,
+remaining-useful-life quantile models, SHAP explanations). Status WATCH = AI early warning while ISO vibration is
+still normal. When asked why, cite the SHAP reasons the tools return.
 Rules:
 - Every number you state must come from a tool call in this turn. Never invent readings.
 - When you talk about a specific asset, call focus_asset (or diagnose_asset) so the 3D view shows it.

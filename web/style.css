@@ -7,7 +7,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13px/1
 body{display:grid;grid-template-columns:250px 1fr 400px;grid-template-rows:56px 1fr;grid-template-areas:"h h h" "l v s";height:100vh;overflow:hidden}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
 .tiny{font-size:11px;color:var(--faint)}
-.c-ok{color:var(--ok)} .c-warn{color:var(--warn)} .c-alarm{color:var(--alarm)} .c-standby{color:var(--standby)} .c-trip{color:var(--trip)}
+.c-ok{color:var(--ok)} .c-watch{color:#a78bfa} .c-warn{color:var(--warn)} .c-alarm{color:var(--alarm)} .c-standby{color:var(--standby)} .c-trip{color:var(--trip)}
 
 /* header */
 header{grid-area:h;display:flex;align-items:center;gap:22px;padding:0 16px;background:var(--bg2);border-bottom:1px solid var(--line)}
@@ -86,3 +86,16 @@ main{grid-area:v;position:relative;overflow:hidden;background:var(--bg)}
 #llm{padding:0 14px 10px}
 #events .ev{display:grid;grid-template-columns:86px 50px 60px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font:11px "IBM Plex Mono",monospace}
 @media (max-width:1100px){body{grid-template-columns:0 1fr 360px} aside{display:none}}
+
+/* AI condition models card */
+.mlbox{background:var(--panel);border:1px solid #3b3566;border-radius:8px;padding:10px 12px;margin:0 0 12px}
+.mlh{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px}
+.mlrow{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;padding:3px 0}
+.mlrow>span:first-child{color:var(--dim)}
+.gauge{position:relative;height:8px;background:#1f2a37;border-radius:4px}
+.gauge i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.gauge b{position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:var(--dim)}
+.why{display:grid;grid-template-columns:1fr 70px 110px;gap:8px;align-items:center;font-size:12px;padding:2px 0}
+.why .mono{text-align:right;color:var(--dim)}
+.wbar{height:6px;background:#1f2a37;border-radius:3px}
+.wbar i{display:block;height:100%;background:#a78bfa;border-radius:3px}

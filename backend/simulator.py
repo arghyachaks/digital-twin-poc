@@ -52,6 +52,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 STATUS_STYLE = {  # colour, glow, pulse speed -> drives M_TwinMaster HealthColor/HealthGlow/PulseSpeed
     "OK":      ([0.10, 1.00, 0.25], 0.0, 1.0),
     "STANDBY": ([0.20, 0.50, 1.00], 0.6, 1.0),
+    "WATCH":   ([0.66, 0.45, 1.00], 1.2, 2.0),      # AI early warning while ISO vibration is still OK
     "WARN":    ([1.00, 0.55, 0.00], 2.5, 4.0),
     "ALARM":   ([1.00, 0.05, 0.02], 6.0, 9.0),
     "TRIPPED": ([1.00, 0.00, 0.00], 4.0, 2.0),
@@ -286,9 +287,9 @@ class Plant:
                 self.assets[e["tag"]] = MODELS.get(k, Asset)(e, self.rng)
         self.events = deque(maxlen=50)
         self.pending = []
-        # Demo scenario: hero pump P-101A has early bearing wear, fails in ~70 sim hours
-        if "P-101A" in self.assets:
-            self.assets["P-101A"].inject("bearing_fault", severity=0.05, hours_to_fail=70)
+        # Demo scenario: hero pump P-101A runs healthy for 20 sim hours (the AI learns its baseline),
+        # then a bearing defect starts and grows to failure in ~70 h
+        self.scheduled = [(20.0, "P-101A", "bearing_fault", 0.02, 70)] if "P-101A" in self.assets else []
         self._csv = None
 
     def event(self, tag, level, msg):
@@ -300,6 +301,10 @@ class Plant:
     def step(self, dt_real):
         hours = dt_real * self.speed / 3600.0
         self.t_h += hours
+        for item in [x for x in self.scheduled if x[0] <= self.t_h]:
+            self.scheduled.remove(item)
+            _, tag, mode, sev, htf = item
+            self.assets[tag].inject(mode, severity=sev, hours_to_fail=htf)
         self.sim_time += dt.timedelta(hours=hours)
         frames = {}
         for tag, a in self.assets.items():
@@ -317,8 +322,8 @@ class Plant:
     def on_status_change(self, a, prev, f):
         s = f["sensors"]
         if a.kind == "pump" and f["status"] in ("WARN", "ALARM"):
-            self.event(a.tag, f["status"], f"Vibration {s['vibration_mm_s']:.1f} mm/s, bearing {s['bearing_temp_c']:.0f} C"
-                                           + (f", RUL ~{f['rul_h']:.0f} h" if f["rul_h"] else ""))
+            self.event(a.tag, f["status"], f"ISO vibration {s['vibration_mm_s']:.1f} mm/s "
+                                           f"({'zone C' if f['status'] == 'WARN' else 'zone D'}), bearing {s['bearing_temp_c']:.0f} C")
         elif f["status"] in ("WARN", "ALARM"):
             self.event(a.tag, f["status"], f"{a.kind} condition degraded (degradation {a.d:.0%})")
 
@@ -359,6 +364,7 @@ class Plant:
             a.reset()
             self.event(a.tag, "INFO", "Reset to healthy")
         elif c == "reset_all":
+            self.scheduled = []
             for x in self.assets.values():
                 x.reset()
                 if isinstance(x, Pump):

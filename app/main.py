@@ -50,6 +50,15 @@ async def lifespan(app):
 app = FastAPI(title="CDU-100 Digital Twin", version="0.2", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def no_stale_ui(request, call_next):
+    """Browsers must revalidate UI files, so a code update is picked up without a hard refresh."""
+    resp = await call_next(request)
+    if request.url.path.startswith(("/static/", "/config/")):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 class ChatIn(BaseModel):
     message: str
     session_id: str = "default"

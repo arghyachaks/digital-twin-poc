@@ -1,4 +1,11 @@
-# ML tooling (dataset generation now; model training in the next step)
+# ML tooling: dataset generation, training, experiment tracking
 numpy
 pandas
 matplotlib
+# Pinned: Windows Smart App Control blocks a DLL in the newest SciPy (1.18); 1.15 is widely trusted
+scipy==1.15.3
+scikit-learn==1.6.1   # pinned with scipy: newest sklearn DLLs are blocked by Smart App Control
+xgboost>=2.0
+joblib
+sqlalchemy<2.1   # 2.0 falls back to pure Python if Smart App Control blocks its DLLs
+mlflow>=2.10

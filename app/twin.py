@@ -11,7 +11,17 @@ from collections import deque
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "backend"))
-from simulator import LAYOUT, Plant  # noqa: E402
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+import numpy as np  # noqa: E402
+from simulator import LAYOUT, STATUS_STYLE, Plant  # noqa: E402
+
+try:
+    from ml import features as FE  # noqa: E402
+    from ml.predict import PumpModels  # noqa: E402
+except Exception as _e:  # ML stack optional: the twin still runs on rules alone
+    FE, PumpModels = None, None
+    print(f"[ml] disabled: {_e}")
 
 UNITS = {"vibration_mm_s": "mm/s", "vib_1x_mm_s": "mm/s", "vib_2x_mm_s": "mm/s", "vib_axial_mm_s": "mm/s",
          "vib_bpfo_mm_s": "mm/s", "vib_hf_env_g": "g", "vib_broadband_mm_s": "mm/s", "suction_bar": "bar", "bearing_temp_c": "°C", "motor_current_a": "A", "discharge_bar": "bar",
@@ -33,6 +43,15 @@ class Twin:
         self.clients = set()
         self.tags = list(self.plant.assets)
         self.spec = {e["tag"]: e for e in LAYOUT["equipment"]}
+        # ---- ML condition models (ml/models, trained by ml/train.py)
+        self.models = PumpModels.load() if PumpModels else None
+        self.ml_hist = {}          # pump tag -> deque[(t, feature-sensor vector)] while running
+        self.ml_base = {}          # pump tag -> healthy baseline vector (first 12 running hours)
+        self.ml = {}               # pump tag -> latest assessment
+        self.ml_streak = {}        # consecutive alerted assessments (debounce)
+        self._tick = 0
+        if self.models:
+            print(f"[ml] loaded condition models v{self.models.version} ({self.models.m['backend']})")
 
     # ------------------------------------------------------------------ loop
     async def run(self):
@@ -46,11 +65,67 @@ class Twin:
                     h.setdefault(k, deque(maxlen=self.history_len)).append((t, v))
                     if f["status"] == "OK" and f["degradation"] < 0.1:
                         self.base.setdefault(tag, {}).setdefault(k, v)
+            self._apply_ml(frames, t)
             self.latest = {"type": "telemetry", "sim_time": self.plant.sim_time.isoformat(),
                            "speed": self.plant.speed, "assets": frames, "events": self.plant.pending[:]}
             self.plant.pending.clear()
             await self.broadcast(self.latest)
             await asyncio.sleep(period)
+
+    # ------------------------------------------------------------------ ML
+    def _apply_ml(self, frames, t):
+        """Score every running pump with the trained models; promote OK -> WATCH on an AI early warning."""
+        if not self.models:
+            return
+        self._tick += 1
+        for tag, f in frames.items():
+            if f["kind"] != "pump":
+                continue
+            if f["status"] in ("STANDBY", "TRIPPED"):
+                self.ml_hist.pop(tag, None)
+                self.ml.pop(tag, None)
+                self.ml_streak[tag] = 0
+                f["ml"] = {"state": "idle"}
+                continue
+            hist = self.ml_hist.setdefault(tag, deque(maxlen=6000))
+            hist.append((t, [f["sensors"].get(k, np.nan) for k in FE.FEAT_SENSORS]))
+            if tag not in self.ml_base:
+                if hist[-1][0] - hist[0][0] >= FE.BASELINE_H:
+                    ts = np.array([h[0] for h in hist])
+                    self.ml_base[tag] = FE.baseline(ts, np.array([h[1] for h in hist]))
+                else:
+                    f["ml"] = {"state": "learning", "progress": round((hist[-1][0] - hist[0][0]) / FE.BASELINE_H, 2)}
+                    continue
+            if self._tick % 2 == 0 or tag not in self.ml:      # score at ~1 Hz
+                recent = [h for h in hist if h[0] >= t - FE.SLOPE_WIN_H - 0.5]
+                try:
+                    r = self.models.assess([h[0] for h in recent], [h[1] for h in recent], self.ml_base[tag])
+                except Exception as e:
+                    r = {"state": "error", "error": str(e)[:120]}
+                prev = self.ml.get(tag)
+                self.ml[tag] = r
+                if r.get("alert"):
+                    self.ml_streak[tag] = self.ml_streak.get(tag, 0) + 1
+                elif not prev or not prev.get("alert") or r.get("anomaly", 0) < 0.8:   # hysteresis
+                    self.ml_streak[tag] = 0
+            r = dict(self.ml[tag])
+            r["state"] = r.get("state", "ok")
+            r["early_warning"] = self.ml_streak.get(tag, 0) >= 3
+            f["ml"] = r
+            # the trained model replaces the straight-line trend estimate for remaining life
+            f["rul_h"] = r["rul_h"]["p50"] if r.get("rul_h") and (r["early_warning"] or f["status"] != "OK") else None
+            if r["early_warning"] and f["status"] == "OK":
+                f["status"] = "WATCH"
+                f["color"], f["glow"], f["pulse"] = STATUS_STYLE["WATCH"]
+            was = getattr(self, "_watch", {}).get(tag, False)
+            now = r["early_warning"]
+            self._watch = {**getattr(self, "_watch", {}), tag: now}
+            if now and not was:
+                rul = r.get("rul_h")
+                msg = (f"AI early warning: anomaly {r['anomaly']:.1f}, likely {r['fault'].replace('_', ' ')} "
+                       f"({r['confidence']:.0%})" + (f", remaining life ~{rul['p50']} h ({rul['p10']}-{rul['p90']})" if rul else "")
+                       + f"; ISO vibration {f['sensors']['vibration_mm_s']:.1f} mm/s")
+                self.plant.event(tag, "AI", msg)
 
     async def broadcast(self, msg):
         if not self.clients:

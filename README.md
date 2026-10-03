@@ -38,19 +38,35 @@ Configured in `.env` (copied from `.env.example` on first run). Default `LLM_PRO
 | `unreal/`, `scripts/2_*`, `scripts/3_*` | Optional Unreal Engine 5 version of the twin (cinematic) | No — optional, parked |
 | `data/` | Telemetry CSV logs for training ML models | Input for the ML step |
 
-## Machine learning (in progress)
-Step 1–2 done: richer pump physics and a labelled training set.
+## Machine learning
+Pumps are scored live by trained models; everything is reproducible with four scripts:
 
-- `backend/pump_physics.py` — one pump model shared by the live twin and the training data: vibration spectrum
-  (1×, 2×, axial, bearing defect band, high-frequency envelope, broadband), temperatures, pressures, with four
-  fault modes: imbalance, misalignment, bearing_fault, cavitation.
-- `scripts\5_generate_dataset.bat` (or `python ml/generate_dataset.py`) — simulates 400 pumps (80 healthy +
-  80 per fault, run to failure) into `ml/data/pump_runs.csv.gz` (~384k rows, ~15 MB, ~20 s). Labels: fault
-  label, severity, remaining useful life; train/val/test split by pump. Read `ml/data/dataset_card.md`.
-- Until the models are trained, the assistant diagnoses pumps with rule-based vibration analysis
-  (`app/agent.py: pump_signature`) — the baseline the ML classifier must beat.
+| Script | What it does | Time |
+|---|---|---|
+| `scripts\5_generate_dataset.bat` | 400 simulated pumps run to failure → `ml/data` (labels: fault, severity, remaining life) | ~20 s |
+| `scripts\6_train_models.bat` | Trains the production models, evaluates them on unseen pumps, logs to MLflow, writes `ml/models` + `ml/reports/model_report.md` | ~1–3 min |
+| `scripts\7_mlflow_ui.bat` | Opens MLflow at http://localhost:5000: runs, metrics, figures, model files | — |
+| `scripts\8_train_lstm.bat` | Trains an LSTM remaining-life challenger and compares it with the boosted model (`ml/reports/rul_model_comparison.md`) | ~5–10 min (CPU) |
+
+Models (`ml/train.py`, features in `ml/features.py`, live scoring in `ml/predict.py`):
+1. **Anomaly detection** — Isolation Forest trained on healthy data only; score ≥ 1.0 = outside healthy behaviour.
+2. **Fault classifier** — XGBoost: normal / imbalance / misalignment / bearing_fault / cavitation.
+3. **Remaining useful life** — XGBoost quantile models (10/50/90%) → "~165 h (120–210)".
+4. **Explainability** — SHAP values (XGBoost TreeSHAP): why this fault, what shortens the remaining life.
+5. **LSTM challenger** — PyTorch sequence model on 24 h of raw history, compared on the same unseen pumps.
+
+Measured on 60 unseen pumps (v1): warning 195 h before failure vs 88 h for the ISO alarm, 0.01% false alarms,
+fault macro-F1 0.993, remaining-life error 38 h (25 h in the last 100 h). Details: `ml/reports/model_report.md`.
+
+**Windows Smart App Control** blocks some brand-new compiled Python packages ("An Application Control policy has
+blocked this file"). `requirements.txt` therefore pins SciPy 1.15.3 and scikit-learn 1.6.1, and SQLAlchemy < 2.1
+(which falls back to pure Python). If another package is blocked, pin it to an older, widely used version the same way.
+
+In the twin: status **WATCH** (violet) = AI early warning while ISO vibration is still OK; the asset panel shows
+the anomaly gauge, diagnosis, remaining-life range and SHAP reasons; the assistant has a `get_ml_assessment` tool.
+Physics shared by the twin and the training data: `backend/pump_physics.py`.
 
 ## Next steps
-1. ML step 3: train Isolation Forest (anomaly), XGBoost (fault class, RUL) and SHAP on `ml/data`, tracked in MLflow.
+1. ML on real data: connect a historian feed, retrain on real failure history, and validate before relying on it.
 2. Assistant: add RAG over maintenance manuals / SOPs and a work-order tool with human approval.
 3. UI: streaming chat replies, X-ray pump view, time scrubber.

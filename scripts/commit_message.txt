@@ -1,13 +1,18 @@
-Pump physics with vibration spectrum + ML training dataset
+ML steps 3-5: trained pump condition models, SHAP explanations, LSTM challenger
 
-- backend/pump_physics.py: shared pump model (1x, 2x, axial, BPFO band,
-  HF envelope, broadband, temps, pressures) with imbalance,
-  misalignment, bearing_fault and cavitation fault modes
-- Live twin uses the same physics; averaged vibration for ISO alarms
-- Rule-based vibration diagnosis replaces reading the injected fault
-- ml/generate_dataset.py: 400 run-to-failure pump histories with
-  fault label, severity and RUL, split by pump; dataset card + plots
-- UI: new sensors, fault buttons and HF envelope chart
+- ml/train.py: Isolation Forest anomaly model, XGBoost fault classifier and
+  quantile remaining-life models (p10/p50/p90), evaluated on 60 unseen pumps
+  and logged to MLflow (sqlite). Production bundle v1 committed in ml/models.
+- v1 results: warning 195 h before failure vs 88 h for the ISO alarm,
+  0.01% false alarms, macro-F1 0.993, RUL MAE 38 h (25 h in the last 100 h).
+- ml/predict.py: live scoring with TreeSHAP reasons (why this fault, what
+  shortens remaining life); twin shows WATCH status, ML card and AI events;
+  assistant gets a get_ml_assessment tool.
+- ml/train_lstm.py: PyTorch LSTM RUL challenger on 24 h raw sequences,
+  compared head-to-head with the boosted model, logged to MLflow.
+- Windows Smart App Control: pin scipy 1.15.3, scikit-learn 1.6.1 and
+  sqlalchemy<2.1; MLflow failures no longer stop a model from being saved.
+- UI files served with no-cache so updates show without a hard refresh.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016fk9L7iRPCzya3PCVVAAEi
